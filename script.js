@@ -1,6 +1,82 @@
 (function () {
   "use strict";
 
+  /* ------------------------------------------
+     Google Drive video links
+     Paste share link OR file ID for each video.
+     Share setting: Anyone with the link → Viewer
+     Example: https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+     ------------------------------------------ */
+  const VIDEO_SOURCES = {
+    cnv1: "https://drive.google.com/file/d/1MeVI_i1Z0CCOCeUdjRjdfIkRk9qgbQxW/view?usp=sharing",
+    cnv2: "https://drive.google.com/file/d/1iYv-1Rn6-uF_p1q0sru1SWBB9lbDO_bl/view?usp=sharing",
+    cnv3: "https://drive.google.com/file/d/1PLA9deKR1aYJjpdXVAwy-OxIlBqonByD/view?usp=sharing",
+    cnv4: "https://drive.google.com/file/d/1GeWSenLzqQiANFBBu2eOf-OIXLi0VXdA/view?usp=sharing",
+    pv1: "https://drive.google.com/file/d/1SZu1BaVpJDvWDKQAmZ71wSzG-Qf87nzV/view?usp=sharing",
+    pv2: "https://drive.google.com/file/d/1x2UQpd1InOMW3dlqVPdzgP_tLYK1CSv_/view?usp=sharing",
+    pv3: "https://drive.google.com/file/d/1jwA3v2gmjv4rUaWxuwIvOed9tVxbkUzN/view?usp=sharing",
+    pv4: "https://drive.google.com/file/d/1i2m1aUpyopriQExIHjYK6_DbjyERjZOC/view?usp=sharing",
+    pv5: "https://drive.google.com/file/d/1cTXbiooaB2MdrAIN4xOsGEKOX6peuBs9/view?usp=sharing",
+    pv6: "https://drive.google.com/file/d/1YMkTrdnpJBnOfOsAPoucMLpkTEwV9WG4/view?usp=sharing",
+    pv7: "https://drive.google.com/file/d/17leSCnn1W7u4jTRKvBaFru2akexmYm_7/view?usp=sharing",
+  };
+
+  function videoKey(src) {
+    return (src || "").replace(/\.mp4.*$/i, "").replace(/^.*\//, "");
+  }
+
+  function extractDriveId(value) {
+    if (!value) return "";
+    const trimmed = value.trim();
+    const dMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (dMatch) return dMatch[1];
+    const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (idMatch) return idMatch[1];
+    if (/^[a-zA-Z0-9_-]{20,}$/.test(trimmed)) return trimmed;
+    return "";
+  }
+
+  function getMappedSource(key) {
+    const normalized = videoKey(key);
+    return VIDEO_SOURCES[normalized] || "";
+  }
+
+  function driveThumbnailUrl(fileId) {
+    return "https://drive.google.com/thumbnail?id=" + fileId + "&sz=w800";
+  }
+
+  function resolveVideoPlayUrl(keyOrUrl) {
+    const mapped = getMappedSource(keyOrUrl);
+    if (!mapped) return keyOrUrl;
+
+    const fileId = extractDriveId(mapped);
+    if (fileId) {
+      return "https://drive.google.com/file/d/" + fileId + "/preview";
+    }
+    return mapped;
+  }
+
+  function applyVideoSources() {
+    document.querySelectorAll("[data-video]").forEach(function (el) {
+      el.setAttribute("data-video-key", videoKey(el.getAttribute("data-video")));
+    });
+
+    document.querySelectorAll("video.reel__media, video.creator__img").forEach(function (vid) {
+      const key = videoKey((vid.getAttribute("src") || "").split("#")[0]);
+      const mapped = getMappedSource(key);
+      const fileId = extractDriveId(mapped);
+
+      if (fileId) {
+        vid.removeAttribute("src");
+        vid.poster = driveThumbnailUrl(fileId);
+        vid.preload = "none";
+        vid.classList.add("is-drive-thumb");
+      }
+    });
+  }
+
+  applyVideoSources();
+
   const toggle = document.querySelector(".nav__toggle");
   const mobileNav = document.getElementById("mobile-nav");
 
@@ -43,6 +119,9 @@
   );
 
   thumbVideos.forEach(function (vid) {
+    if (vid.classList.contains("is-drive-thumb") || !vid.getAttribute("src")) {
+      return;
+    }
     const seekToFrame = function () {
       try {
         if (vid.currentTime < 0.1 && vid.duration) {
@@ -188,6 +267,13 @@
         video.playsInline = true;
         return video;
       }
+      if (/drive\.google\.com/i.test(src)) {
+        const iframe = document.createElement("iframe");
+        iframe.src = src;
+        iframe.allow = "autoplay; fullscreen";
+        iframe.allowFullscreen = true;
+        return iframe;
+      }
       if (/youtube\.com|youtu\.be|vimeo\.com/i.test(src)) {
         const iframe = document.createElement("iframe");
         iframe.src = src;
@@ -210,8 +296,11 @@
 
     const openLightbox = function (trigger) {
       lastFocused = trigger;
-      const src =
-        trigger.getAttribute("data-video") || trigger.getAttribute("data-full");
+      const src = resolveVideoPlayUrl(
+        trigger.getAttribute("data-video-key") ||
+          trigger.getAttribute("data-video") ||
+          trigger.getAttribute("data-full")
+      );
       media.replaceChildren(buildMedia(src));
       caption.textContent = trigger.getAttribute("data-creator") || "";
       lightbox.classList.add("is-open");
